@@ -11,7 +11,7 @@ SYSTEM_PROMPT = {
 
 messages = [SYSTEM_PROMPT]
 
-default_models = ["llama3", "phi3", "tinyllama"]
+default_models = ["tinyllama", "phi3", "llama3"]
 current_models = default_models.copy()
 
 attempts = 2
@@ -36,11 +36,15 @@ def model_change_if_wrong_info(user_input):
         current_models = ["phi3"]
         print("[Switched to phi3]")
         attempts -= 1
+        last_question = messages[-2]["content"] if len(messages) >= 2 else user_input
+        generate_ai_response(last_question)
 
     elif attempts == 1:
         current_models = ["llama3"]
         print("[Switched to llama3]")
         attempts -= 1
+        last_question = messages[-2]["content"] if len(messages) >= 2 else user_input
+        generate_ai_response(last_question)
 
     else:
         print("[All models have been tried. Please check the information manually.]")
@@ -137,32 +141,37 @@ def handle_commands(user_input):
 # -------------------------
 
 def generate_ai_response(user_input):
-    global messages
 
-    messages.append({
-        "role": "user",
-        "content": user_input
-    })
+    try:
+        global messages
 
-    print("\nAI: ", end="", flush=True)
+        messages.append({
+            "role": "user",
+            "content": user_input
+        })
 
-    stream, model_used = chat_with_fallback(messages, current_models)
+        print("\nAI: ", end="", flush=True)
 
-    print(f"(using {model_used}) ", end="", flush=True)
+        stream, model_used = chat_with_fallback(messages, current_models)
 
-    ai_response = ""
+        print(f"(using {model_used}) ", end="", flush=True)
 
-    for chunk in stream:
-        content = chunk["message"]["content"]
-        ai_response += content
-        print(content, end="", flush=True)
+        ai_response = ""
 
-    print()
+        for chunk in stream:
+            content = chunk["message"]["content"]
+            ai_response += content
+            print(content, end="", flush=True)
 
-    messages.append({
-        "role": "assistant",
-        "content": ai_response
-    })
+        print()
+
+        messages.append({
+            "role": "assistant",
+            "content": ai_response
+        })
+    except KeyboardInterrupt:
+        print("\n[Response generation interrupted by user]")
+        return
 
 
 # -------------------------
