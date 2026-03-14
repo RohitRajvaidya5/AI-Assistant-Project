@@ -1,11 +1,15 @@
 import ollama
 import os
-
 import webbrowser
 
 print("Local AI Chatbot (type 'exit' to quit)")
 
-messages = []
+messages = [
+    {
+        "role": "system",
+        "content": "You are a helpful local AI assistant. Respond naturally and concisely."
+    }
+]
 
 default_models = ["llama3", "phi3", "tinyllama"]
 current_models = default_models.copy()
@@ -31,6 +35,8 @@ def model_change_if_wrong_info(user_input):
         webbrowser.open(f"https://www.google.com/search?q={last_question}")
         attempts = 2
 
+        
+
     
 
 
@@ -39,7 +45,6 @@ def clear_terminal():
 
 
 def chat_with_fallback(messages, models):
-
     for model in models:
         try:
             stream = ollama.chat(
@@ -48,23 +53,23 @@ def chat_with_fallback(messages, models):
                 stream=True
             )
             return stream, model
-
         except Exception as e:
             print(f"\n[Model {model} failed: {e}]")
             continue
 
     raise RuntimeError("All models failed.")
 
-
 while True:
-
     user_input = input("\nYou: ").strip().lower()
-
     if user_input == "exit":
         break
 
     # MODEL SWITCH COMMANDS
-    if user_input in ["use phi3", "use phi 3", "use moderate", "use moderate model"]:
+    if user_input in ["hi", "hello", "hey"]:
+        print("\nAI: Hello! How can I help you?")
+        continue
+
+    elif user_input in ["use phi3", "use phi 3", "use moderate", "use moderate model"]:
         current_models = ["phi3"]
         print("[Switched to phi3]")
         continue
