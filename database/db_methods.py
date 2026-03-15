@@ -71,3 +71,4 @@ def store_memory(text):
         print("Database insert error:", e)
         return False
 
+clear_whole_database()
