@@ -3,6 +3,7 @@ import ollama
 import os
 import webbrowser
 import time
+from .database.db_methods import store_memory, get_connection, get_memories, clear_whole_database
 
 
 
