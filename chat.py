@@ -22,7 +22,7 @@ attempts = 2
 # TYPING ANIMATION
 # -------------------------
 
-def type_text(text, speed=0.05):
+def type_text(text, speed=0.03):
     for char in text:
         print(char, end="", flush=True)
         time.sleep(speed)
@@ -49,7 +49,7 @@ def loading_animation():
 
 def exit_program(user_input):
     if user_input in ["exit", "quit", "goodbye", "bye"]:
-        type_text("\nGoodbye, Have A Great Day!")
+        type_text("\nGoodbye, Have A Great Day!\n")
         exit()
 
 
@@ -70,20 +70,20 @@ def model_change_if_wrong_info(user_input):
 
     if attempts == 2:
         current_models = ["phi3"]
-        print("[Switched to phi3]")
+        type_text("[Switched to phi3]")
         attempts -= 1
         last_question = messages[-2]["content"] if len(messages) >= 2 else user_input
         generate_ai_response(last_question)
 
     elif attempts == 1:
         current_models = ["llama3"]
-        print("[Switched to llama3]")
+        type_text("[Switched to llama3]")
         attempts -= 1
         last_question = messages[-2]["content"] if len(messages) >= 2 else user_input
         generate_ai_response(last_question)
 
     else:
-        print("[All models have been tried. Please check the information manually.]")
+        type_text("[All models have been tried. Please check the information manually.]")
 
         last_question = messages[-2]["content"] if len(messages) >= 2 else user_input
         webbrowser.open(f"https://www.google.com/search?q={last_question}")
@@ -107,7 +107,7 @@ def chat_with_fallback(messages, models):
             return stream, model
 
         except Exception as e:
-            print(f"\n[Model {model} failed: {e}]")
+            type_text(f"\n[Model {model} failed: {e}]")
             continue
 
     raise RuntimeError("All models failed.")
@@ -121,7 +121,7 @@ def handle_commands(user_input):
     global current_models, messages
 
     if user_input in ["hi", "hello", "hey"]:
-        type_text("\nAI: Hello! How can I help you?")
+        type_text("\n\nAI: Hello! How can I help you?")
         return True
 
     elif user_input in [
@@ -131,7 +131,7 @@ def handle_commands(user_input):
         "use balanced", "use balanced model"
     ]:
         current_models = ["phi3"]
-        print("[Switched to phi3]")
+        type_text("[Switched to phi3]")
         return True
 
     elif user_input in [
@@ -140,7 +140,7 @@ def handle_commands(user_input):
         "use tiny model"
     ]:
         current_models = ["tinyllama"]
-        print("[Switched to tinyllama]")
+        type_text("[Switched to tinyllama]")
         return True
 
     elif user_input in [
@@ -149,24 +149,24 @@ def handle_commands(user_input):
         "use best", "use best model"
     ]:
         current_models = ["llama3"]
-        print("[Switched to llama3]")
+        type_text("[Switched to llama3]")
         return True
 
     elif user_input in ["use default", "reset model"]:
         current_models = default_models.copy()
-        print("[Switched to default model priority]")
+        type_text("[Switched to default model priority]")
         return True
 
     elif user_input in ["clear", "clear chat"]:
         clear_terminal()
         messages.clear()
         messages.append(SYSTEM_PROMPT)
-        print("Chat cleared.")
+        type_text("Chat cleared.")
         return True
 
     elif any(word in user_input for word in ["wrong", "incorrect", "not right", "too much time"]):
         model_change_if_wrong_info(user_input)
-        print(f"[Attempts remaining: {attempts}]")
+        type_text(f"[Attempts remaining: {attempts}]")
         return True
 
     return False
@@ -202,15 +202,15 @@ def generate_ai_response(user_input):
             if first_token:
                 loading = False
                 spinner_thread.join()
-                print("\rAI: ", end="", flush=True)
-                print(f"(using {model_used}) ", end="", flush=True)
+                print("\nAI: ", end="", flush=True)
+                print(f"\n(using {model_used}) ", end="", flush=True)
+                print("\n")
                 first_token = False
 
             content = chunk["message"]["content"]
-            ai_response += content
+            ai_response += content + "\n"
             print(content, end="", flush=True)
 
-        print()
 
         messages.append({
             "role": "assistant",
@@ -219,7 +219,7 @@ def generate_ai_response(user_input):
 
     except KeyboardInterrupt:
         loading = False
-        print("\n[Response generation interrupted by user]")
+        type_text("\n[Response generation interrupted by user]\n")
 
 
 # -------------------------
@@ -231,6 +231,7 @@ type_text("\nWelcome to the Local AI Assistant! \nType 'exit' to quit, or 'clear
 while True:
 
     try:
+        print("\n")
         user_input = input("\nYou: ").strip().lower()
     except (EOFError, KeyboardInterrupt):
         continue
