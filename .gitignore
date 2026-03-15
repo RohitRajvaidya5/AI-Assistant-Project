@@ -1,3 +1,5 @@
 env/
 update_readme.py
 ai_features.md
+.env
+database/__pycache__
