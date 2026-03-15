@@ -1,8 +1,10 @@
+import threading
 import ollama
 import os
 import webbrowser
+import time
 
-print("Local AI Chatbot (type 'exit' to quit)")
+
 
 SYSTEM_PROMPT = {
     "role": "system",
@@ -15,6 +17,40 @@ default_models = ["tinyllama", "phi3", "llama3"]
 current_models = default_models.copy()
 
 attempts = 2
+
+# -------------------------
+# TYPING ANIMATION
+# -------------------------
+
+def type_text(text, speed=0.05):
+    for char in text:
+        print(char, end="", flush=True)
+        time.sleep(speed)
+    print()
+
+# -------------------------
+# LOADING SPINNER
+# -------------------------
+
+loading = False
+
+def loading_animation():
+    spinner = ["|", "/", "-", "\\"]
+    i = 0
+    while loading:
+        print(f"\rAI thinking {spinner[i % len(spinner)]}", end="", flush=True)
+        time.sleep(0.1)
+        i += 1
+
+
+# --------------------------------
+# Exit the program with keywords
+# --------------------------------
+
+def exit_program(user_input):
+    if user_input in ["exit", "quit", "goodbye", "bye"]:
+        type_text("\nGoodbye, Have A Great Day!")
+        exit()
 
 
 # -------------------------
@@ -85,7 +121,7 @@ def handle_commands(user_input):
     global current_models, messages
 
     if user_input in ["hi", "hello", "hey"]:
-        print("\nAI: Hello! How can I help you?")
+        type_text("\nAI: Hello! How can I help you?")
         return True
 
     elif user_input in [
@@ -142,23 +178,34 @@ def handle_commands(user_input):
 
 def generate_ai_response(user_input):
 
-    try:
-        global messages
+    global messages, loading
 
+    try:
         messages.append({
             "role": "user",
             "content": user_input
         })
 
-        print("\nAI: ", end="", flush=True)
+        # start spinner
+        loading = True
+        spinner_thread = threading.Thread(target=loading_animation)
+        spinner_thread.start()
 
         stream, model_used = chat_with_fallback(messages, current_models)
 
-        print(f"(using {model_used}) ", end="", flush=True)
-
         ai_response = ""
+        first_token = True
 
         for chunk in stream:
+
+            # stop spinner when first token arrives
+            if first_token:
+                loading = False
+                spinner_thread.join()
+                print("\rAI: ", end="", flush=True)
+                print(f"(using {model_used}) ", end="", flush=True)
+                first_token = False
+
             content = chunk["message"]["content"]
             ai_response += content
             print(content, end="", flush=True)
@@ -169,21 +216,26 @@ def generate_ai_response(user_input):
             "role": "assistant",
             "content": ai_response
         })
+
     except KeyboardInterrupt:
+        loading = False
         print("\n[Response generation interrupted by user]")
-        return
 
 
 # -------------------------
 # MAIN LOOP
 # -------------------------
 
+type_text("\nWelcome to the Local AI Assistant! \nType 'exit' to quit, or 'clear' to clear the chat.")
+
 while True:
 
-    user_input = input("\nYou: ").strip().lower()
+    try:
+        user_input = input("\nYou: ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        continue
 
-    if user_input == "exit":
-        break
+    exit_program(user_input)
 
     if handle_commands(user_input):
         continue
