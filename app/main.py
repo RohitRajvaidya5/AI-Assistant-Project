@@ -19,7 +19,7 @@ SYSTEM_PROMPT = {
 
 messages = [SYSTEM_PROMPT]
 
-default_models = ["tinyllama", "phi3", "llama3"]
+default_models = ["phi3", "deepseek-coder:6.7b", "llama3"]
 current_models = default_models.copy()
 
 attempts = 2
@@ -31,53 +31,23 @@ attempts = 2
 
 def store_into_database(user_input):
 
-    try:
-        triggers = ["remember", "store", "save"]
+    triggers = ["remember", "store", "save"]
 
-        if any(trigger in user_input for trigger in triggers):
+    user_lower = user_input.lower()
 
-            # remove trigger words
-            text = user_input
-            for trigger in triggers:
-                text = text.replace(trigger, "")
+    if any(user_lower.startswith(trigger) for trigger in triggers):
 
-            text = text.strip()
+        memory = ""
+        for trigger in triggers:
+            if user_lower.startswith(trigger):
+                memory = user_input[len(trigger):].strip()
+                break
 
-            # ask model to paraphrase for memory storage
-            paraphrase_prompt = f"""
-            Extract the user fact from this sentence.
+        memory = memory.strip('"').strip("'")
 
-            Rules:
-            - Output ONLY the final fact
-            - No explanation
-            - No extra text
-            - One sentence only
-
-            Example:
-            Input: remember my name is Rohit
-            Output: User name is Rohit
-
-            Sentence:
-            {text}
-            """
-
-            response = ollama.chat(
-                model="tinyllama",
-                messages=[{"role": "user", "content": paraphrase_prompt}]
-            )
-
-            memory = response["message"]["content"].strip()
-
-            if "Output:" in memory:
-                memory = memory.split("Output:")[-1].strip()
-
+        if memory:
             store_memory(memory)
-
             type_text("\n[Saving this into memory]\n")
-
-    except Exception as e:
-        print(e)
-
 
 # -------------------------
 # TYPING ANIMATION
@@ -192,7 +162,7 @@ def handle_commands(user_input):
 
     elif user_input in [
         "use phi3", "use phi 3",
-        "use moderate", "use medium",
+        "use fast one", "use fast model",
         "use balanced", "use medium model"
     ]:
 
@@ -201,11 +171,10 @@ def handle_commands(user_input):
         return True
 
     elif user_input in [
-        "use tinyllama", "use tiny llama",
-        "use small", "use small model", "user tiny model"
+        "use deepseek", "use code model",
+        "use code one", "use coder model"
     ]:
-
-        current_models = ["tinyllama"]
+        current_models = ["deepseek-coder:6.7b"]
         type_text("[Switched to tinyllama]")
         return True
 
@@ -313,12 +282,12 @@ while True:
 
         exit_program(user_input)
 
+        store_into_database(user_input)
+
         if handle_commands(user_input):
             continue
 
         response = generate_ai_response(user_input)
-
-        store_into_database(user_input)
 
     except (EOFError, KeyboardInterrupt):
         continue
