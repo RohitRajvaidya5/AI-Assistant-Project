@@ -1,11 +1,16 @@
+from pathlib import Path
 import threading
 import ollama
 import os
 import webbrowser
 import time
+from config.logging_config import setup_logger
+import logging
+from .database.db_methods import store_memory, get_memories, clear_whole_database
 
-from database.db_methods import store_memory, get_memories, clear_whole_database
+setup_logger()
 
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = {
     "role": "system",
@@ -295,6 +300,8 @@ def generate_ai_response(user_input):
 
 type_text("\nWelcome to the Local AI Assistant!")
 type_text("Type 'exit' to quit, or 'clear' to clear the chat.")
+
+logger.info("Initiate the assistant with basic texts")
 
 while True:
 
