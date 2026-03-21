@@ -3,3 +3,5 @@ update_readme.py
 ai_features.md
 .env
 database/__pycache__
+
+models/vosk
