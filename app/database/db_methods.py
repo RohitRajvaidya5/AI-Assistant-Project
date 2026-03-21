@@ -70,5 +70,3 @@ def store_memory(text):
     except psycopg2.Error as e:
         print("Database insert error:", e)
         return False
-
-clear_whole_database()

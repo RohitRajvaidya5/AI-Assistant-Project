@@ -6,7 +6,7 @@ import webbrowser
 import time
 from config.logging_config import setup_logger
 import logging
-from .database.db_methods import store_memory, get_memories, clear_whole_database
+from app.database.db_methods import store_memory, get_memories, clear_whole_database
 
 setup_logger()
 
@@ -23,6 +23,10 @@ default_models = ["phi3", "deepseek-coder:6.7b", "llama3"]
 current_models = default_models.copy()
 
 attempts = 2
+
+
+def main():
+    print("Starting AI Assistant...")
 
 
 # -------------------------
@@ -48,6 +52,33 @@ def store_into_database(user_input):
         if memory:
             store_memory(memory)
             type_text("\n[Saving this into memory]\n")
+
+
+# ----------------------------------
+# Fetch Relevant Info From Database
+# ----------------------------------
+
+def fetch_relevant_memory():
+
+    print("fetching data from database for context")
+    
+    memories = get_memories()
+
+    return memories
+
+
+def build_context(memory_list):
+    if not memory_list:
+        return ""
+
+    context = "Here is some relevant past information about the user:\n"
+
+    for mem in memory_list:
+        context += f"- {mem}\n"
+
+    return context
+
+
 
 # -------------------------
 # TYPING ANIMATION
@@ -216,6 +247,20 @@ def generate_ai_response(user_input):
 
     try:
 
+        # 🔹 STEP 1: Fetch memory
+        memory_list = fetch_relevant_memory()
+
+        # 🔹 STEP 2: Build context
+        context = build_context(memory_list)
+
+        # 🔹 STEP 3: Inject as system message (IMPORTANT)
+        if context:
+            messages.append({
+                "role": "system",
+                "content": context
+            })
+
+        # 🔹 USER MESSAGE
         messages.append({
             "role": "user",
             "content": user_input
@@ -230,10 +275,11 @@ def generate_ai_response(user_input):
         ai_response = ""
         first_token = True
 
+        print(f"messages : \n{messages}\n")
+
         for chunk in stream:
 
             if first_token:
-
                 loading = False
                 spinner_thread.join()
 
@@ -261,7 +307,6 @@ def generate_ai_response(user_input):
         loading = False
         type_text("\n[Response generation interrupted]\n")
         return ""
-
 
 # -------------------------
 # MAIN LOOP
