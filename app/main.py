@@ -233,6 +233,10 @@ def handle_commands(user_input):
         model_change_if_wrong_info(user_input)
         type_text(f"[Attempts remaining: {attempts}]")
         return True
+    
+    elif any(word in user_input for word in ["clear whole data", "clear database", "clear data from ai"]):
+        clear_whole_database()
+        type_text("Database Cleared, Data In AI Cleared")
 
     return False
 
