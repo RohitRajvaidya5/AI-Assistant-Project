@@ -279,8 +279,6 @@ def generate_ai_response(user_input):
         ai_response = ""
         first_token = True
 
-        print(f"messages : \n{messages}\n")
-
         for chunk in stream:
 
             if first_token:
