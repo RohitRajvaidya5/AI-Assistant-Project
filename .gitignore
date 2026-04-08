@@ -1,17 +1,19 @@
 env/
+
 update_readme.py
+
 ai_features.md
+
 .env
-<<<<<<< HEAD
-database/__pycache__
-app/__pycache__
-models/
-=======
 
 app/database/__pycache__
+
 logs/
+
 app/__pycache__
+
 config/__pycache__
 
 models/vosk
->>>>>>> feature/database_store
+
+app/__pycache__

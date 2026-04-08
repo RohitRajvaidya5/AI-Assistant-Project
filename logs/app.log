@@ -1,6 +1,0 @@
-2026-03-16 22:43:30,531 | INFO | __main__ | Initiate the assistant with basic texts
-2026-03-16 22:43:54,681 | INFO | httpx | HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
-2026-03-16 22:49:43,455 | INFO | __main__ | Initiate the assistant with basic texts
-2026-03-16 22:50:14,379 | INFO | httpx | HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
-2026-03-16 22:51:06,668 | INFO | __main__ | Initiate the assistant with basic texts
-2026-03-16 22:51:20,773 | INFO | httpx | HTTP Request: POST http://127.0.0.1:11434/api/chat "HTTP/1.1 200 OK"
