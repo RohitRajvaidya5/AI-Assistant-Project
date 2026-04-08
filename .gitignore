@@ -1,19 +1,18 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Env
+.env
 env/
+
+# Logs
+logs/
+
+# Models (optional if large)
+models/
 
 update_readme.py
 
 ai_features.md
-
-.env
-
-app/database/__pycache__
-
-logs/
-
-app/__pycache__
-
-config/__pycache__
-
-models/vosk
-
-app/__pycache__
