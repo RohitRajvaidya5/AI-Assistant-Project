@@ -1,10 +1,16 @@
+from pathlib import Path
 import threading
 import ollama
 import os
 import webbrowser
 import time
+from config.logging_config import setup_logger
+import logging
+from app.database.db_methods import store_memory, get_memories, clear_whole_database
 
+setup_logger()
 
+logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = {
     "role": "system",
@@ -13,10 +19,66 @@ SYSTEM_PROMPT = {
 
 messages = [SYSTEM_PROMPT]
 
-default_models = ["tinyllama", "phi3", "llama3"]
+default_models = ["phi3", "deepseek-coder:6.7b", "llama3"]
 current_models = default_models.copy()
 
 attempts = 2
+
+
+def main():
+    print("Starting AI Assistant...")
+
+
+# -------------------------
+# DATABASE STORE FUNCTION
+# -------------------------
+
+def store_into_database(user_input):
+
+    triggers = ["remember", "store", "save"]
+
+    user_lower = user_input.lower()
+
+    if any(user_lower.startswith(trigger) for trigger in triggers):
+
+        memory = ""
+        for trigger in triggers:
+            if user_lower.startswith(trigger):
+                memory = user_input[len(trigger):].strip()
+                break
+
+        memory = memory.strip('"').strip("'")
+
+        if memory:
+            store_memory(memory)
+            type_text("\n[Saving this into memory]\n")
+
+
+# ----------------------------------
+# Fetch Relevant Info From Database
+# ----------------------------------
+
+def fetch_relevant_memory():
+
+    print("fetching data from database for context")
+    
+    memories = get_memories()
+
+    return memories
+
+
+def build_context(memory_list):
+    if not memory_list:
+        return ""
+
+    context = "Here is some relevant past information about the user:\n"
+
+    for mem in memory_list:
+        context += f"- {mem}\n"
+
+    return context
+
+
 
 # -------------------------
 # TYPING ANIMATION
@@ -28,6 +90,7 @@ def type_text(text, speed=0.03):
         time.sleep(speed)
     print()
 
+
 # -------------------------
 # LOADING SPINNER
 # -------------------------
@@ -37,17 +100,19 @@ loading = False
 def loading_animation():
     spinner = ["|", "/", "-", "\\"]
     i = 0
+
     while loading:
         print(f"\rAI thinking {spinner[i % len(spinner)]}", end="", flush=True)
         time.sleep(0.1)
         i += 1
 
 
-# --------------------------------
-# Exit the program with keywords
-# --------------------------------
+# -------------------------
+# EXIT PROGRAM
+# -------------------------
 
 def exit_program(user_input):
+
     if user_input in ["exit", "quit", "goodbye", "bye"]:
         type_text("\nGoodbye, Have A Great Day!\n")
         exit()
@@ -62,31 +127,27 @@ def clear_terminal():
 
 
 # -------------------------
-# MODEL SWITCH IF ANSWER WRONG
+# MODEL SWITCH IF WRONG
 # -------------------------
 
 def model_change_if_wrong_info(user_input):
+
     global attempts, current_models
 
     if attempts == 2:
         current_models = ["phi3"]
         type_text("[Switched to phi3]")
         attempts -= 1
-        last_question = messages[-2]["content"] if len(messages) >= 2 else user_input
-        generate_ai_response(last_question)
 
     elif attempts == 1:
         current_models = ["llama3"]
         type_text("[Switched to llama3]")
         attempts -= 1
-        last_question = messages[-2]["content"] if len(messages) >= 2 else user_input
-        generate_ai_response(last_question)
 
     else:
-        type_text("[All models have been tried. Please check the information manually.]")
+        type_text("[All models tried. Searching Google...]")
 
-        last_question = messages[-2]["content"] if len(messages) >= 2 else user_input
-        webbrowser.open(f"https://www.google.com/search?q={last_question}")
+        webbrowser.open(f"https://www.google.com/search?q={user_input}")
 
         attempts = 2
 
@@ -98,15 +159,19 @@ def model_change_if_wrong_info(user_input):
 def chat_with_fallback(messages, models):
 
     for model in models:
+
         try:
+
             stream = ollama.chat(
                 model=model,
                 messages=messages,
                 stream=True
             )
+
             return stream, model
 
         except Exception as e:
+
             type_text(f"\n[Model {model} failed: {e}]")
             continue
 
@@ -118,36 +183,33 @@ def chat_with_fallback(messages, models):
 # -------------------------
 
 def handle_commands(user_input):
+
     global current_models, messages
 
     if user_input in ["hi", "hello", "hey"]:
-        type_text("\n\nAI: Hello! How can I help you?")
+
+        type_text("\nAI: Hello! How can I help you?")
         return True
 
     elif user_input in [
         "use phi3", "use phi 3",
-        "use moderate", "use moderate model",
-        "use medium", "use medium model",
-        "use balanced", "use balanced model"
+        "use fast one", "use fast model",
+        "use balanced", "use medium model"
     ]:
+
         current_models = ["phi3"]
         type_text("[Switched to phi3]")
         return True
 
     elif user_input in [
-        "use tinyllama", "use tiny llama",
-        "use small", "use small model",
-        "use tiny model"
+        "use deepseek", "use code model",
+        "use code one", "use coder model"
     ]:
-        current_models = ["tinyllama"]
+        current_models = ["deepseek-coder:6.7b"]
         type_text("[Switched to tinyllama]")
         return True
 
-    elif user_input in [
-        "use llama3", "use llama 3",
-        "use powerful", "use powerful model",
-        "use best", "use best model"
-    ]:
+    elif user_input in [ "use llama3", "use llama 3", "use powerful", "use best", "use best model"]:
         current_models = ["llama3"]
         type_text("[Switched to llama3]")
         return True
@@ -158,16 +220,23 @@ def handle_commands(user_input):
         return True
 
     elif user_input in ["clear", "clear chat"]:
+
         clear_terminal()
         messages.clear()
         messages.append(SYSTEM_PROMPT)
+
         type_text("Chat cleared.")
         return True
 
-    elif any(word in user_input for word in ["wrong", "incorrect", "not right", "too much time"]):
+    elif any(word in user_input for word in ["wrong", "incorrect", "not right"]):
+
         model_change_if_wrong_info(user_input)
         type_text(f"[Attempts remaining: {attempts}]")
         return True
+    
+    elif any(word in user_input for word in ["clear whole data", "clear database", "clear data from ai"]):
+        clear_whole_database()
+        type_text("Database Cleared, Data In AI Cleared")
 
     return False
 
@@ -181,12 +250,26 @@ def generate_ai_response(user_input):
     global messages, loading
 
     try:
+
+        # 🔹 STEP 1: Fetch memory
+        memory_list = fetch_relevant_memory()
+
+        # 🔹 STEP 2: Build context
+        context = build_context(memory_list)
+
+        # 🔹 STEP 3: Inject as system message (IMPORTANT)
+        if context:
+            messages.append({
+                "role": "system",
+                "content": context
+            })
+
+        # 🔹 USER MESSAGE
         messages.append({
             "role": "user",
             "content": user_input
         })
 
-        # start spinner
         loading = True
         spinner_thread = threading.Thread(target=loading_animation)
         spinner_thread.start()
@@ -198,51 +281,63 @@ def generate_ai_response(user_input):
 
         for chunk in stream:
 
-            # stop spinner when first token arrives
             if first_token:
                 loading = False
                 spinner_thread.join()
-                print("\nAI: ", end="", flush=True)
-                print(f"\n(using {model_used}) ", end="", flush=True)
-                print("\n")
+
+                print("\nAI:")
+                print(f"(using {model_used})\n")
+
                 first_token = False
 
             content = chunk["message"]["content"]
-            ai_response += content + "\n"
+
+            ai_response += content
             print(content, end="", flush=True)
 
+        print("\n")
 
         messages.append({
             "role": "assistant",
             "content": ai_response
         })
 
-    except KeyboardInterrupt:
-        loading = False
-        type_text("\n[Response generation interrupted by user]\n")
+        return ai_response
 
+    except KeyboardInterrupt:
+
+        loading = False
+        type_text("\n[Response generation interrupted]\n")
+        return ""
 
 # -------------------------
 # MAIN LOOP
 # -------------------------
 
-type_text("\nWelcome to the Local AI Assistant! \nType 'exit' to quit, or 'clear' to clear the chat.")
+type_text("\nWelcome to the Local AI Assistant!")
+type_text("Type 'exit' to quit, or 'clear' to clear the chat.")
+
+logger.info("Initiate the assistant with basic texts")
 
 while True:
 
     try:
+
         print("\n")
-        user_input = input("\nYou: ").strip().lower()
+
+        user_input = input("You: ").strip().lower()
+
+        exit_program(user_input)
+
+        store_into_database(user_input)
+
+        if handle_commands(user_input):
+            continue
+
+        response = generate_ai_response(user_input)
+
     except (EOFError, KeyboardInterrupt):
         continue
-
-    exit_program(user_input)
-
-    if handle_commands(user_input):
-        continue
-
-    try:
-        generate_ai_response(user_input)
 
     except RuntimeError as e:
         print("\nError:", e)
