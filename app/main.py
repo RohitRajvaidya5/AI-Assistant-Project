@@ -15,6 +15,7 @@ from app.database.db_methods import (
     get_memories,
     clear_whole_database
 )
+from typing import Dict, Any, cast
 
 # =====================================================
 # HTTPX PATCH
@@ -158,8 +159,9 @@ class MusicService:
 
         try:
             videos_search = VideosSearch(query, limit=3)
-            result: Dict[str, Any] = videos_search.result()
-            videos = result.get("result", [])
+            # result: Dict[str, Any] = videos_search.result()
+            results = cast(Dict[str, Any], videos_search.result())
+            videos = results.get("result", [])
 
             if not videos:
                 print("No results found")
@@ -229,7 +231,17 @@ class AIService:
 
             spinner.start()
 
-            stream, model_used = self.chat_with_fallback()
+            try:
+                stream, model_used = self.chat_with_fallback()
+            except KeyboardInterrupt:
+                spinner.stop()
+                # Remove the user message we just added since we're interrupting
+                if self.messages and self.messages[-1]["role"] == "user":
+                    self.messages.pop()
+                if context and self.messages and self.messages[-1]["role"] == "system":
+                    self.messages.pop()
+                TerminalUI.type_text("\n[Response generation interrupted]\n")
+                return ""
 
             ai_response = ""
             first_token = True
@@ -395,7 +407,8 @@ class AssistantApp:
 
                 self.ai_service.generate_response(user_input)
 
-            except (EOFError, KeyboardInterrupt):
+            except KeyboardInterrupt:
+                TerminalUI.type_text("\n[Interrupted]\n")
                 continue
 
             except RuntimeError as e:
