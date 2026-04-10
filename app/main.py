@@ -1,343 +1,433 @@
-from pathlib import Path
-import threading
-import ollama
+"""
+single_file_assistant.py
+Production-style single-file refactor of your assistant.
+
+Keeps everything in one file, but structured like scalable software:
+- Classes instead of global state
+- Clear separation of concerns
+- Easier to maintain/test
+"""
+
 import os
-import webbrowser
 import time
-from config.logging_config import setup_logger
+import threading
 import logging
-from app.database.db_methods import store_memory, get_memories, clear_whole_database
+import webbrowser
+from typing import List, Dict, Any
+
+import ollama
+import httpx
+from youtubesearchpython import VideosSearch
+
+from config.logging_config import setup_logger
+from app.database.db_methods import (
+    store_memory,
+    get_memories,
+    clear_whole_database
+)
+
+# =====================================================
+# HTTPX PATCH
+# =====================================================
+
+_original_post = httpx.post
+
+
+def _patched_post(*args, **kwargs):
+    kwargs.pop("proxies", None)
+    return _original_post(*args, **kwargs)
+
+
+httpx.post = _patched_post
+
+# =====================================================
+# LOGGER
+# =====================================================
 
 setup_logger()
-
 logger = logging.getLogger(__name__)
+
+# =====================================================
+# CONFIG
+# =====================================================
 
 SYSTEM_PROMPT = {
     "role": "system",
     "content": "You are a helpful local AI assistant. Respond naturally and concisely."
 }
 
-messages = [SYSTEM_PROMPT]
 
-default_models = ["phi3", "deepseek-coder:6.7b", "llama3"]
-current_models = default_models.copy()
+# =====================================================
+# UTILITIES
+# =====================================================
 
-attempts = 2
+class TerminalUI:
+    @staticmethod
+    def type_text(text: str, speed: float = 0.02):
+        for char in text:
+            print(char, end="", flush=True)
+            time.sleep(speed)
+        print()
 
-
-def main():
-    print("Starting AI Assistant...")
-
-
-# -------------------------
-# DATABASE STORE FUNCTION
-# -------------------------
-
-def store_into_database(user_input):
-
-    triggers = ["remember", "store", "save"]
-
-    user_lower = user_input.lower()
-
-    if any(user_lower.startswith(trigger) for trigger in triggers):
-
-        memory = ""
-        for trigger in triggers:
-            if user_lower.startswith(trigger):
-                memory = user_input[len(trigger):].strip()
-                break
-
-        memory = memory.strip('"').strip("'")
-
-        if memory:
-            store_memory(memory)
-            type_text("\n[Saving this into memory]\n")
+    @staticmethod
+    def clear_terminal():
+        os.system("cls" if os.name == "nt" else "clear")
 
 
-# ----------------------------------
-# Fetch Relevant Info From Database
-# ----------------------------------
+class Spinner:
+    def __init__(self):
+        self.loading = False
+        self.thread = None
 
-def fetch_relevant_memory():
+    def start(self):
+        self.loading = True
+        self.thread = threading.Thread(target=self._animate)
+        self.thread.start()
 
-    print("fetching data from database for context")
-    
-    memories = get_memories()
+    def stop(self):
+        self.loading = False
+        if self.thread:
+            self.thread.join()
 
-    return memories
-
-
-def build_context(memory_list):
-    if not memory_list:
-        return ""
-
-    context = "Here is some relevant past information about the user:\n"
-
-    for mem in memory_list:
-        context += f"- {mem}\n"
-
-    return context
-
+    def _animate(self):
+        spinner = ["|", "/", "-", "\\"]
+        i = 0
+        while self.loading:
+            print(f"\rAI thinking {spinner[i % len(spinner)]}", end="", flush=True)
+            time.sleep(0.1)
+            i += 1
 
 
-# -------------------------
-# TYPING ANIMATION
-# -------------------------
+# =====================================================
+# MEMORY SERVICE
+# =====================================================
 
-def type_text(text, speed=0.03):
-    for char in text:
-        print(char, end="", flush=True)
-        time.sleep(speed)
-    print()
+class MemoryService:
+    TRIGGERS = ["remember", "store", "save"]
 
+    def save_if_needed(self, user_input: str):
+        lower_text = user_input.lower()
 
-# -------------------------
-# LOADING SPINNER
-# -------------------------
+        for trigger in self.TRIGGERS:
+            if lower_text.startswith(trigger):
+                memory = user_input[len(trigger):].strip().strip('"').strip("'")
+                if memory:
+                    store_memory(memory)
+                    TerminalUI.type_text("\n[Saving this into memory]\n")
+                return
 
-loading = False
+    def fetch_context(self) -> str:
+        memories = get_memories()
+        if not memories:
+            return ""
 
-def loading_animation():
-    spinner = ["|", "/", "-", "\\"]
-    i = 0
+        context = "Here is some relevant past information about the user:\n"
+        for mem in memories:
+            context += f"- {mem}\n"
 
-    while loading:
-        print(f"\rAI thinking {spinner[i % len(spinner)]}", end="", flush=True)
-        time.sleep(0.1)
-        i += 1
+        return context
 
-
-# -------------------------
-# EXIT PROGRAM
-# -------------------------
-
-def exit_program(user_input):
-
-    if user_input in ["exit", "quit", "goodbye", "bye"]:
-        type_text("\nGoodbye, Have A Great Day!\n")
-        exit()
+    def clear_database(self):
+        clear_whole_database()
 
 
-# -------------------------
-# TERMINAL UTILITIES
-# -------------------------
+# =====================================================
+# MUSIC SERVICE
+# =====================================================
 
-def clear_terminal():
-    os.system('cls' if os.name == 'nt' else 'clear')
+class MusicService:
+    COMMAND_PREFIXES = ("play", "listen", "start")
 
+    def is_music_command(self, text: str) -> bool:
+        return text.lower().startswith(self.COMMAND_PREFIXES)
 
-# -------------------------
-# MODEL SWITCH IF WRONG
-# -------------------------
+    def handle(self, user_input: str):
+        query = self.extract_song_name(user_input)
 
-def model_change_if_wrong_info(user_input):
+        if not query:
+            print("No song detected")
+            return
 
-    global attempts, current_models
+        query = self.enhance_query(query)
+        self.play_song(query)
 
-    if attempts == 2:
-        current_models = ["phi3"]
-        type_text("[Switched to phi3]")
-        attempts -= 1
+    def extract_song_name(self, text: str) -> str:
+        text_lower = text.lower()
+        words_to_remove = ["play", "start", "listen", "song"]
 
-    elif attempts == 1:
-        current_models = ["llama3"]
-        type_text("[Switched to llama3]")
-        attempts -= 1
+        for word in words_to_remove:
+            text_lower = text_lower.replace(word, "")
 
-    else:
-        type_text("[All models tried. Searching Google...]")
+        return text_lower.strip()
 
-        webbrowser.open(f"https://www.google.com/search?q={user_input}")
+    def enhance_query(self, query: str) -> str:
+        return query + " song"
 
-        attempts = 2
-
-
-# -------------------------
-# CHAT WITH MODEL FALLBACK
-# -------------------------
-
-def chat_with_fallback(messages, models):
-
-    for model in models:
+    def play_song(self, query: str):
+        print("Searching for:", query)
 
         try:
+            videos_search = VideosSearch(query, limit=3)
+            result: Dict[str, Any] = videos_search.result()
+            videos = result.get("result", [])
 
-            stream = ollama.chat(
-                model=model,
-                messages=messages,
-                stream=True
+            if not videos:
+                print("No results found")
+                return
+
+            for video in videos:
+                title = video.get("title", "").lower()
+                url = video.get("link")
+
+                if "song" in title or "official" in title:
+                    self.play_background(url, video.get("title"))
+                    return
+
+            first_video = videos[0]
+            self.play_background(
+                first_video.get("link"),
+                first_video.get("title")
             )
 
-            return stream, model
-
         except Exception as e:
+            print(f"[YouTube search failed: {e}]")
+            webbrowser.open(
+                f"https://www.youtube.com/results?search_query={query}"
+            )
 
-            type_text(f"\n[Model {model} failed: {e}]")
-            continue
+    def play_background(self, url: str, title: str):
+        # Print immediately (before returning to main loop)
+        print(f"\n🎵 Now playing: {title}\n")
+        
+        def open_browser():
+            try:
+                webbrowser.open(url, new=1, autoraise=False)
+            except Exception as e:
+                print(f"Failed to open music: {e}")
 
-    raise RuntimeError("All models failed.")
-
-
-# -------------------------
-# COMMAND HANDLER
-# -------------------------
-
-def handle_commands(user_input):
-
-    global current_models, messages
-
-    if user_input in ["hi", "hello", "hey"]:
-
-        type_text("\nAI: Hello! How can I help you?")
-        return True
-
-    elif user_input in [
-        "use phi3", "use phi 3",
-        "use fast one", "use fast model",
-        "use balanced", "use medium model"
-    ]:
-
-        current_models = ["phi3"]
-        type_text("[Switched to phi3]")
-        return True
-
-    elif user_input in [
-        "use deepseek", "use code model",
-        "use code one", "use coder model"
-    ]:
-        current_models = ["deepseek-coder:6.7b"]
-        type_text("[Switched to tinyllama]")
-        return True
-
-    elif user_input in [ "use llama3", "use llama 3", "use powerful", "use best", "use best model"]:
-        current_models = ["llama3"]
-        type_text("[Switched to llama3]")
-        return True
-
-    elif user_input in ["use default", "reset model"]:
-        current_models = default_models.copy()
-        type_text("[Switched to default model priority]")
-        return True
-
-    elif user_input in ["clear", "clear chat"]:
-
-        clear_terminal()
-        messages.clear()
-        messages.append(SYSTEM_PROMPT)
-
-        type_text("Chat cleared.")
-        return True
-
-    elif any(word in user_input for word in ["wrong", "incorrect", "not right"]):
-
-        model_change_if_wrong_info(user_input)
-        type_text(f"[Attempts remaining: {attempts}]")
-        return True
-    
-    elif any(word in user_input for word in ["clear whole data", "clear database", "clear data from ai"]):
-        clear_whole_database()
-        type_text("Database Cleared, Data In AI Cleared")
-
-    return False
+        threading.Thread(target=open_browser, daemon=True).start()
 
 
-# -------------------------
-# GENERATE AI RESPONSE
-# -------------------------
+# =====================================================
+# AI SERVICE
+# =====================================================
 
-def generate_ai_response(user_input):
+class AIService:
+    DEFAULT_MODELS = ["phi3", "deepseek-coder:6.7b", "llama3"]
 
-    global messages, loading
+    def __init__(self, memory_service: MemoryService):
+        self.memory_service = memory_service
+        self.messages = [SYSTEM_PROMPT.copy()]
+        self.current_models = self.DEFAULT_MODELS.copy()
+        self.attempts = 2
 
-    try:
+    def generate_response(self, user_input: str):
+        spinner = Spinner()
 
-        # 🔹 STEP 1: Fetch memory
-        memory_list = fetch_relevant_memory()
+        try:
+            context = self.memory_service.fetch_context()
+            if context:
+                self.messages.append({
+                    "role": "system",
+                    "content": context
+                })
 
-        # 🔹 STEP 2: Build context
-        context = build_context(memory_list)
-
-        # 🔹 STEP 3: Inject as system message (IMPORTANT)
-        if context:
-            messages.append({
-                "role": "system",
-                "content": context
+            self.messages.append({
+                "role": "user",
+                "content": user_input
             })
 
-        # 🔹 USER MESSAGE
-        messages.append({
-            "role": "user",
-            "content": user_input
-        })
+            spinner.start()
 
-        loading = True
-        spinner_thread = threading.Thread(target=loading_animation)
-        spinner_thread.start()
+            stream, model_used = self.chat_with_fallback()
 
-        stream, model_used = chat_with_fallback(messages, current_models)
+            ai_response = ""
+            first_token = True
 
-        ai_response = ""
-        first_token = True
+            for chunk in stream:
+                if first_token:
+                    spinner.stop()
+                    print("\nAI:")
+                    print(f"(using {model_used})\n")
+                    first_token = False
 
-        for chunk in stream:
+                content = chunk["message"]["content"]
+                ai_response += content
+                print(content, end="", flush=True)
 
-            if first_token:
-                loading = False
-                spinner_thread.join()
+            print("\n")
 
-                print("\nAI:")
-                print(f"(using {model_used})\n")
+            self.messages.append({
+                "role": "assistant",
+                "content": ai_response
+            })
 
-                first_token = False
+            return ai_response
 
-            content = chunk["message"]["content"]
+        except KeyboardInterrupt:
+            spinner.stop()
+            TerminalUI.type_text("\n[Response generation interrupted]\n")
+            return ""
 
-            ai_response += content
-            print(content, end="", flush=True)
+    def chat_with_fallback(self):
+        for model in self.current_models:
+            try:
+                stream = ollama.chat(
+                    model=model,
+                    messages=self.messages,
+                    stream=True
+                )
+                return stream, model
 
-        print("\n")
+            except Exception as e:
+                TerminalUI.type_text(f"\n[Model {model} failed: {e}]")
 
-        messages.append({
-            "role": "assistant",
-            "content": ai_response
-        })
+        raise RuntimeError("All models failed.")
 
-        return ai_response
+    def switch_model(self, model_name: str):
+        self.current_models = [model_name]
+        TerminalUI.type_text(f"[Switched to {model_name}]")
 
-    except KeyboardInterrupt:
+    def reset_models(self):
+        self.current_models = self.DEFAULT_MODELS.copy()
+        TerminalUI.type_text("[Switched to default model priority]")
 
-        loading = False
-        type_text("\n[Response generation interrupted]\n")
-        return ""
+    def retry_with_next_model(self, user_input: str):
+        if self.attempts == 2:
+            self.switch_model("phi3")
+            self.attempts -= 1
 
-# -------------------------
-# MAIN LOOP
-# -------------------------
+        elif self.attempts == 1:
+            self.switch_model("llama3")
+            self.attempts -= 1
 
-type_text("\nWelcome to the Local AI Assistant!")
-type_text("Type 'exit' to quit, or 'clear' to clear the chat.")
+        else:
+            TerminalUI.type_text("[All models tried. Searching Google...]")
+            webbrowser.open(
+                f"https://www.google.com/search?q={user_input}"
+            )
+            self.attempts = 2
 
-logger.info("Initiate the assistant with basic texts")
 
-while True:
+# =====================================================
+# COMMAND SERVICE
+# =====================================================
 
-    try:
+class CommandService:
+    def __init__(self, ai_service: AIService, memory_service: MemoryService):
+        self.ai_service = ai_service
+        self.memory_service = memory_service
 
-        print("\n")
+    def handle(self, user_input: str) -> bool:
+        cmd = user_input.lower()
 
-        user_input = input("You: ").strip().lower()
+        if cmd in ["hi", "hello", "hey"]:
+            TerminalUI.type_text("\nAI: Hello! How can I help you?")
+            return True
 
-        exit_program(user_input)
+        if cmd in ["clear", "clear chat"]:
+            TerminalUI.clear_terminal()
+            self.ai_service.messages = [SYSTEM_PROMPT.copy()]
+            TerminalUI.type_text("Chat cleared.")
+            return True
 
-        store_into_database(user_input)
+        if cmd in ["use phi3", "use phi 3"]:
+            self.ai_service.switch_model("phi3")
+            return True
 
-        if handle_commands(user_input):
-            continue
+        if cmd in ["use deepseek", "use code model"]:
+            self.ai_service.switch_model("deepseek-coder:6.7b")
+            return True
 
-        response = generate_ai_response(user_input)
+        if cmd in ["use llama3", "use llama 3"]:
+            self.ai_service.switch_model("llama3")
+            return True
 
-    except (EOFError, KeyboardInterrupt):
-        continue
+        if cmd in ["use default", "reset model"]:
+            self.ai_service.reset_models()
+            return True
 
-    except RuntimeError as e:
-        print("\nError:", e)
+        if any(word in cmd for word in ["wrong", "incorrect", "not right"]):
+            self.ai_service.retry_with_next_model(user_input)
+            return True
+
+        if any(word in cmd for word in [
+            "clear whole data",
+            "clear database",
+            "clear data from ai"
+        ]):
+            self.memory_service.clear_database()
+            TerminalUI.type_text("Database Cleared")
+            return True
+
+        return False
+
+
+# =====================================================
+# ASSISTANT APP
+# =====================================================
+
+class AssistantApp:
+    def __init__(self):
+        self.memory_service = MemoryService()
+        self.music_service = MusicService()
+        self.ai_service = AIService(self.memory_service)
+        self.command_service = CommandService(
+            self.ai_service,
+            self.memory_service
+        )
+
+    def run(self):
+        TerminalUI.type_text("\nWelcome to the Local AI Assistant!")
+        TerminalUI.type_text("Type 'exit' to quit, or 'clear' to clear chat.")
+
+        logger.info("Assistant started")
+
+        while True:
+            try:
+                print()
+                user_input = input("You: ").strip()
+
+                if self.is_exit(user_input):
+                    TerminalUI.type_text(
+                        "\nGoodbye, Have A Great Day!\n"
+                    )
+                    break
+
+                self.memory_service.save_if_needed(user_input)
+
+                if self.music_service.is_music_command(user_input):
+                    self.music_service.handle(user_input)
+                    continue
+
+                if self.command_service.handle(user_input):
+                    continue
+
+                self.ai_service.generate_response(user_input)
+
+            except (EOFError, KeyboardInterrupt):
+                continue
+
+            except RuntimeError as e:
+                print("\nError:", e)
+
+    @staticmethod
+    def is_exit(user_input: str) -> bool:
+        return user_input.lower() in [
+            "exit",
+            "quit",
+            "bye",
+            "goodbye"
+        ]
+
+
+# =====================================================
+# ENTRY POINT
+# =====================================================
+def main():
+    app = AssistantApp()
+    app.run()
+
+
+if __name__ == "__main__":
+    main()
