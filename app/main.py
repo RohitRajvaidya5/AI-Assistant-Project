@@ -1,13 +1,3 @@
-"""
-single_file_assistant.py
-Production-style single-file refactor of your assistant.
-
-Keeps everything in one file, but structured like scalable software:
-- Classes instead of global state
-- Clear separation of concerns
-- Easier to maintain/test
-"""
-
 import os
 import time
 import threading
