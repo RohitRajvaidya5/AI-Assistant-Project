@@ -127,7 +127,7 @@ class MemoryService:
 # =====================================================
 
 class MusicService:
-    COMMAND_PREFIXES = ("play", "listen", "start")
+    COMMAND_PREFIXES = ("play", "listen")
 
     def is_music_command(self, text: str) -> bool:
         return text.lower().startswith(self.COMMAND_PREFIXES)
@@ -144,7 +144,7 @@ class MusicService:
 
     def extract_song_name(self, text: str) -> str:
         text_lower = text.lower()
-        words_to_remove = ["play", "start", "listen", "song"]
+        words_to_remove = ["play","listen", "song"]
 
         for word in words_to_remove:
             text_lower = text_lower.replace(word, "")
@@ -205,7 +205,7 @@ class MusicService:
 # =====================================================
 
 class AIService:
-    DEFAULT_MODELS = ["phi3", "deepseek-coder:6.7b", "llama3"]
+    DEFAULT_MODELS = ["qwen3:8b", "deepseek-coder:6.7b", "llama3"]
 
     def __init__(self, memory_service: MemoryService):
         self.memory_service = memory_service
