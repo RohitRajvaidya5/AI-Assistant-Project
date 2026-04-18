@@ -205,7 +205,7 @@ class MusicService:
 # =====================================================
 
 class AIService:
-    DEFAULT_MODELS = ["qwen3:8b", "deepseek-coder:6.7b", "llama3"]
+    DEFAULT_MODELS = ["qwen3:8b", "phi3"]
 
     def __init__(self, memory_service: MemoryService):
         self.memory_service = memory_service
