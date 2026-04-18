@@ -16,3 +16,5 @@ models/
 update_readme.py
 
 ai_features.md
+
+*.wav
